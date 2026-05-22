@@ -1,0 +1,100 @@
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: ecommify-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ecommify
+      POSTGRES_USER: ecommify
+      POSTGRES_PASSWORD: ecommify2024
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./database/postgres/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - ecommify-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ecommify -d ecommify"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── MongoDB ──────────────────────────────────────────────────
+  mongo:
+    image: mongo:7-jammy
+    container_name: ecommify-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: ecommify
+    volumes:
+      - mongo_data:/data/db
+      - ./database/mongo/seed.js:/docker-entrypoint-initdb.d/seed.js
+    ports:
+      - "27017:27017"
+    networks:
+      - ecommify-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok", "--quiet"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── Backend (Node.js + Express) ──────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ecommify-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      POSTGRES_URL: postgresql://ecommify:ecommify2024@postgres:5432/ecommify
+      POSTGRES_SSL: "false"
+      MONGODB_URI: mongodb://mongo:27017/ecommify
+      JWT_SECRET: ecommify_jwt_secret_docker_2024
+      JWT_EXPIRES_IN: 24h
+    ports:
+      - "3000:3000"
+    networks:
+      - ecommify-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Frontend (React + Nginx) ─────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ecommify-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+    networks:
+      - ecommify-net
+
+volumes:
+  postgres_data:
+  mongo_data:
+
+networks:
+  ecommify-net:
+    driver: bridge
