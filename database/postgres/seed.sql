@@ -8,22 +8,22 @@ INSERT INTO sellers (id, name, email, password_hash) VALUES
   ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
    'TechStore BR',
    'techstore@ecommify.com',
-   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
+   '$2b$10$vgU8eYk6ZWnkHUL9fRhBGuGREscx21ap8mzb9QDkMupqBvtwSU9Eq'),
   ('b1ffcd00-ad1c-5f09-cc7e-7cc0ce491b22',
    'Gadget World',
    'gadget@ecommify.com',
-   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy')
+   '$2b$10$vgU8eYk6ZWnkHUL9fRhBGuGREscx21ap8mzb9QDkMupqBvtwSU9Eq')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO customers (id, name, email, password_hash) VALUES
   ('c2aafe11-be2d-6a1a-dd8f-8dd1cf502c33',
    'Ana García',
    'ana@example.com',
-   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
+   '$2b$10$vgU8eYk6ZWnkHUL9fRhBGuGREscx21ap8mzb9QDkMupqBvtwSU9Eq'),
   ('d3bbff22-cf3e-7b2b-ee90-9ee2d0613d44',
    'Carlos López',
    'carlos@example.com',
-   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy')
+   '$2b$10$vgU8eYk6ZWnkHUL9fRhBGuGREscx21ap8mzb9QDkMupqBvtwSU9Eq')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO products (id, name, seller_id, stock, price) VALUES
