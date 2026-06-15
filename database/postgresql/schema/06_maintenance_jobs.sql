@@ -155,17 +155,17 @@ COMMENT ON VIEW v_slow_queries IS
 CREATE OR REPLACE VIEW v_unused_indexes AS
 SELECT
   schemaname,
-  tablename,
-  indexname,
-  pg_size_pretty(pg_relation_size(indexname::regclass)) AS index_size,
-  idx_scan  AS scans,
+  relname                                                    AS tablename,
+  indexrelname                                               AS indexname,
+  pg_size_pretty(pg_relation_size(indexrelid))               AS index_size,
+  idx_scan                                                   AS scans,
   idx_tup_read,
   idx_tup_fetch
 FROM pg_stat_user_indexes
 WHERE idx_scan = 0
-  AND indexname NOT LIKE '%_pkey'
-  AND indexname NOT LIKE '%_key'
-ORDER BY pg_relation_size(indexname::regclass) DESC;
+  AND indexrelname NOT LIKE '%_pkey'
+  AND indexrelname NOT LIKE '%_key'
+ORDER BY pg_relation_size(indexrelid) DESC;
 
 COMMENT ON VIEW v_unused_indexes IS
   'Índices con 0 escaneos desde el último pg_stat_reset. '

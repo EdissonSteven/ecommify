@@ -98,6 +98,18 @@ CREATE TABLE IF NOT EXISTS geolocation (
     PRIMARY KEY (zip_code_prefix, latitude, longitude)
 );
 
+-- Agregar tabla reviews 
+CREATE TABLE IF NOT EXISTS reviews (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_id       UUID REFERENCES customers(id),
+    product_id        VARCHAR(100) REFERENCES products(id),
+    rating            SMALLINT CHECK (rating BETWEEN 1 AND 5),
+    comment           TEXT,
+    verified_purchase BOOLEAN DEFAULT FALSE,
+    created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+
 -- ── Índices ──────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_customers_email    ON customers(email);
 CREATE INDEX IF NOT EXISTS idx_orders_customer    ON orders(customer_id);
@@ -105,3 +117,6 @@ CREATE INDEX IF NOT EXISTS idx_order_items_order  ON order_items(order_id);
 CREATE INDEX IF NOT EXISTS idx_products_seller    ON products(seller_id);
 CREATE INDEX IF NOT EXISTS idx_payments_order     ON payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_stock_history_prod ON stock_history(product_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_product  ON reviews(product_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_customer ON reviews(customer_id);
+CREATE INDEX IF NOT EXISTS idx_reviews_rating   ON reviews(rating);

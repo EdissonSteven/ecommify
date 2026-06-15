@@ -113,3 +113,26 @@ INSERT INTO promotions (product_id, discount_percent, promotion_period, descript
    '[2026-06-01 00:00:00+00, 2026-06-30 23:59:59+00]',
    'Promo Mitad de Año — 15% off Sony WH-1000XM5')
 ON CONFLICT DO NOTHING;
+
+INSERT INTO payments (id, order_id, amount, payment_type, status, created_at)
+SELECT
+  gen_random_uuid(),
+  o.id::TEXT,
+  COALESCE(
+    (SELECT SUM(oi.unit_price * oi.qty)
+     FROM order_items oi WHERE oi.order_id = o.id::TEXT),
+    round((random() * 2000 + 100)::NUMERIC, 2)
+  ),
+  (ARRAY['credit_card','debit_card','pix','bank_transfer','cash'])[
+    1 + floor(random() * 5)::INT
+  ],
+  CASE
+    WHEN o.status IN ('delivered','shipped','confirmed') THEN 'completed'
+    WHEN o.status = 'cancelled' THEN 'refunded'
+    ELSE 'pending'
+  END,
+  o.created_at + INTERVAL '5 minutes' * floor(random() * 12)::INT
+FROM orders o
+WHERE NOT EXISTS (
+  SELECT 1 FROM payments p WHERE p.order_id = o.id::TEXT
+);
