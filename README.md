@@ -5,15 +5,15 @@
 | | |
 |---|---|
 | **Proyecto** | Ecommify — Plataforma e-commerce multivendedor de productos tecnológicos |
-| **Asignatura** | Optimización de Bases de Datos / Testing, Verificación y Validación |
+| **Asignatura** | Optimización de Bases de Datos (Arquitectura y selección de tecnologías) |
 | **Integrantes** | David Ricardo Grandas Cárdenas · Danilo Andrés Cortés Saavedra · Edisson Steven Bustos Galeano |
-| **Dataset** | [Brazilian E-Commerce (Olist) — Kaggle](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) |
+| **Dataset base** | [Brazilian E-Commerce (Olist) — Kaggle](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) |
 
 ---
 
-## Arquitectura políglota de datos
+## Resumen del proyecto
 
-Ecommify implementa una arquitectura de persistencia políglota donde cada motor resuelve el problema para el que está optimizado:
+Ecommify implementa una **arquitectura de persistencia políglota**: PostgreSQL en Supabase para el módulo transaccional (órdenes, pagos, inventario) y MongoDB en Atlas para el módulo analítico (catálogo, reseñas, comportamiento de usuarios). Esta arquitectura fue diseñada, implementada, optimizada y evaluada empíricamente a lo largo de seis unidades del curso, con **datos reales medidos contra infraestructura productiva** — no simulaciones locales.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -24,23 +24,19 @@ Ecommify implementa una arquitectura de persistencia políglota donde cada motor
        ┌───────▼────────┐        ┌────────▼────────┐
        │  PostgreSQL 15  │        │   MongoDB 8     │
        │    Supabase     │        │  Atlas M0       │
-       │  (transaccional)│        │  (documental)   │
+       │ Prioridad CAP:  │        │ Prioridad CAP:  │
+       │      CP         │        │      AP         │
        ├────────────────┤        ├─────────────────┤
-       │ • sellers       │        │ • products      │
-       │ • customers     │        │   (catálogo     │
-       │ • products      │        │    rico + specs)│
-       │   (inventario)  │        │ • reviews       │
-       │ • orders        │        │ • user_behavior │
-       │   (particionada)│        │   (TTL 30 días) │
-       │ • order_items   │        │ • analytics_    │
-       │ • payments      │        │   snapshots     │
-       │ • promotions    │        │   (TTL 90 días) │
-       │ • stock_history │        └─────────────────┘
-       └────────────────┘
+       │ • customers     │        │ • products      │
+       │ • sellers       │        │   (catálogo     │
+       │ • products      │        │    enriquecido) │
+       │ • orders        │        │ • reviews       │
+       │   (particionada)│        │ • user_behavior │
+       │ • order_items   │        │   (TTL 30 días) │
+       │ • payments      │        │ • analytics_    │
+       │ • promotions    │        │   snapshots     │
+       └────────────────┘        └─────────────────┘
 ```
-
-**PostgreSQL** maneja datos transaccionales (ACID): órdenes, pagos, inventario, autenticación.  
-**MongoDB** maneja datos documentales: catálogo rico (specs variables por categoría), reseñas, comportamiento de usuarios.
 
 ---
 
@@ -49,43 +45,39 @@ Ecommify implementa una arquitectura de persistencia políglota donde cada motor
 ```
 ecommify/
 ├── schema/                              ← Scripts DDL PostgreSQL (ejecutar en orden)
-│   ├── 00_base_schema.sql               ← Tablas base: sellers, customers, products,
-│   │                                       orders, order_items, payments, reviews
-│   ├── 01_extensions.sql                ← pg_trgm, btree_gin, btree_gist, pgcrypto,
-│   │                                       uuid-ossp, pg_stat_statements
-│   ├── 02_advanced_types.sql            ← JSONB, TEXT[], TSTZRANGE, tipo address_type,
-│   │                                       tabla promotions con EXCLUDE USING GIST
-│   ├── 03_partitioning.sql              ← orders particionada RANGE(created_at)
-│   │                                       16 particiones trimestrales 2016-2026
-│   ├── 04_materialized_views.sql        ← mv_sales_by_category_monthly,
-│   │                                       mv_customer_segments, mv_product_performance
-│   ├── 05_triggers.sql                  ← updated_at automático, auditoría de
-│   │                                       order_status, control de stock
-│   └── 06_maintenance_jobs.sql          ← pg_cron jobs, vistas OLTP/OLAP
+│   ├── 00_base_schema.sql
+│   ├── 01_extensions.sql
+│   ├── 02_advanced_types.sql
+│   ├── 03_partitioning.sql
+│   ├── 04_materialized_views.sql        ← Corregido: joins o.id::TEXT, status 'completed'
+│   ├── 05_triggers.sql
+│   └── 06_maintenance_jobs.sql
 │
-├── seed_data/                           ← Datos de prueba
-│   ├── 01_seed.sql                      ← Datos base: 2 sellers, 2 customers,
-│   │                                       8 products con specs, tags y promociones
-│   ├── 02_seed_masivo.sql               ← Datos sintéticos masivos compatibles
-│   │                                       con Supabase: 5k clientes, 20 vendors,
-│   │                                       500 products, 150k órdenes, 300k items
-│   └── 03_optimizacion_analisis.sql     ← 8 queries EXPLAIN ANALYZE (antes/después)
-│                                           + 10 índices especializados optimizados
+├── seed_data/
+│   ├── 01_seed.sql
+│   ├── 02_seed_masivo.sql               ← Compatible con Supabase (150k órdenes)
+│   └── 03_optimizacion_analisis.sql     ← 10 índices + EXPLAIN ANALYZE corregido
 │
-├── notebooks/                           ← Análisis y optimización (Google Colab)
-│   ├── MongoDB_U5_Optimizacion_Ecommify.ipynb ← Optimización Atlas: índices ESR,
-│   │                                              .explain(), pipeline 7 stages,
-│   │                                              replica set, Write Concerns
-│   └── PostgreSQL_U4_Ecommify_Optimizacion.ipynb
-│
-├── evidencias/                          ← Capturas de métricas reales
-│   ├── supabase_explain_antes_despues.png
-│   ├── supabase_tabla_comparativa.png
-│   ├── atlas_explain_stats.png
-│   └── atlas_replica_set.png
+├── notebooks/
+│   ├── MongoDB_U5_Optimizacion_Ecommify.ipynb     ← Índices ESR, sharding, replica set
+│   └── Load_Testing_Performance_U6.ipynb          ← Carga concurrente, escalabilidad, CAP
 │
 ├── docs/
-│   └── Documento_Tecnico_U5_Ecommify_APA7.docx ← Documento técnico completo APA7
+│   ├── Documento_Tecnico_U5_Ecommify_APA7.docx    ← Implementación y optimización detallada
+│   ├── Informe_Tecnico_Integral_U6_Ecommify.docx  ← Arquitectura, rendimiento, análisis CAP
+│   └── Presentacion_Ejecutiva_U6_Ecommify.pptx    ← Presentación de alto nivel (11 slides)
+│
+├── resultados/
+│   └── RESULTADOS_CONSOLIDADOS_U5_U6.md           ← Todas las métricas en un solo lugar
+│
+├── evidencias/
+│   ├── supabase_01_comparativa_before_after.png
+│   ├── supabase_02_tamano_indices.png
+│   ├── supabase_03_volumen_tablas.png
+│   ├── supabase_04_particiones_orders.png
+│   ├── supabase_05_integridad_datos.png
+│   ├── atlas_01_explain_stats.png
+│   └── atlas_02_replica_set.png
 │
 ├── backend/                             ← API REST Node.js + Express
 ├── frontend/                            ← React + Vite servido por nginx
@@ -100,45 +92,41 @@ ecommify/
 | Capa | Tecnología | Versión |
 |---|---|---|
 | Backend | Node.js + Express | 20 / 5 |
-| Testing | Jest | 29 |
+| Testing unitario | Jest | 29 |
 | BD relacional | PostgreSQL en Supabase | 15 |
 | BD documental | MongoDB en Atlas | M0 v8.0.26 |
 | Frontend | React + Vite (nginx) | 18 / 5 |
 | Auth | JWT + bcryptjs | rounds=10 |
-| Contenedores | Docker + Docker Compose | — |
+| Pruebas de carga | Python (ThreadPoolExecutor, psycopg2, pymongo) | 3.11 |
 
 ---
 
-## Setup en Supabase (PostgreSQL — Unidad 5)
+## Setup en Supabase (PostgreSQL)
 
-### Infraestructura real utilizada
+### Infraestructura utilizada
 
 | Parámetro | Valor |
 |---|---|
-| Plataforma | Supabase free tier |
+| Plataforma | Supabase free tier (plan Nano) |
 | Región | us-west-2 (Oregon) |
 | Motor | PostgreSQL 15 |
-| URL | smaliszofgizhffpnlha.supabase.co |
+| Conexión recomendada | Transaction pooler — `aws-1-us-west-2.pooler.supabase.com:6543` |
 
-### Ajustes previos requeridos
+> ⚠️ El host de conexión directa (`db.<project>.supabase.co:5432`) requiere IPv6 y puede fallar
+> en redes locales sin esa conectividad. Usar siempre el **connection pooler** para scripts externos.
 
-Antes de ejecutar el seed masivo, aplicar estos ajustes en el SQL Editor de Supabase:
+### Ajustes previos requeridos (antes del seed masivo)
 
 ```sql
--- 1. Permitir seed sin restricciones NOT NULL
 ALTER TABLE orders      ALTER COLUMN order_id DROP NOT NULL;
 ALTER TABLE orders      ALTER COLUMN total    DROP NOT NULL;
-
--- 2. Ampliar columnas para UUIDs (36 chars)
 ALTER TABLE order_items ALTER COLUMN order_id TYPE VARCHAR(36);
 ALTER TABLE payments    ALTER COLUMN order_id TYPE VARCHAR(36);
-
--- 3. Desactivar triggers durante seed masivo
 ALTER TABLE order_items DISABLE TRIGGER USER;
 ALTER TABLE payments    DISABLE TRIGGER USER;
 ```
 
-### Orden de ejecución en Supabase SQL Editor
+### Orden de ejecución
 
 ```
 1. Activar extensiones desde Dashboard → Database → Extensions:
@@ -151,158 +139,105 @@ ALTER TABLE payments    DISABLE TRIGGER USER;
 6. schema/05_triggers.sql
 7. schema/06_maintenance_jobs.sql
 8. seed_data/01_seed.sql
-9. seed_data/02_seed_masivo.sql          ← ~5-8 minutos
+9. seed_data/02_seed_masivo.sql            ← ~5-8 minutos
 10. seed_data/03_optimizacion_analisis.sql ← Crea 10 índices + EXPLAIN
 ```
-
-> ⚠️ `CREATE INDEX CONCURRENTLY` no está soportado en Supabase SQL Editor.
-> Los scripts ya incluyen `CREATE INDEX` sin `CONCURRENTLY`.
 
 ### Datos cargados y verificados
 
 | Tabla | Registros | Integridad |
 |---|---|---|
-| customers | 5.000 | ✅ |
+| customers | 5,000 | ✅ |
 | sellers | 20 | ✅ |
 | products | 500 | ✅ |
-| orders | 150.000 | ✅ 0 huérfanos |
-| order_items | 299.893 | ✅ 0 huérfanos |
-| payments | 150.000 | ✅ 0 huérfanos |
-| reviews | ~25.254 | ✅ |
+| orders (16 particiones) | 149,995 | ✅ 0 huérfanos |
+| order_items | 299,893 | ✅ 0 huérfanos |
+| payments | 150,000 | ✅ 0 huérfanos |
+| reviews | 24,945 | ✅ |
 
 ---
 
-## Setup en MongoDB Atlas (Unidad 5)
+## Setup en MongoDB Atlas
 
-### Infraestructura real utilizada
+### Infraestructura utilizada
 
 | Parámetro | Valor |
 |---|---|
 | Plataforma | MongoDB Atlas M0 (free tier) |
 | Versión | 8.0.26 |
-| Cluster | ecommify.xdwdeqf.mongodb.net |
-| Colecciones | products (1.200) · reviews (1.984) |
+| Cluster | `ecommify.xdwdeqf.mongodb.net` |
+| Topología | 1 PRIMARY + 2 SECONDARY (replica set real) |
+| Colecciones | products (1,200) · reviews (1,984) |
 
-### Ejecutar notebook de optimización
+### Ejecutar notebooks
 
 ```bash
-# Abrir en Google Colab o Jupyter local
-notebooks/MongoDB_U5_Optimizacion_Ecommify.ipynb
+# Notebook de optimización (Unidad 5): índices ESR, explain(), pipeline, sharding teórico
+jupyter notebook notebooks/MongoDB_U5_Optimizacion_Ecommify.ipynb
 
-# Configurar MONGODB_URI en la celda de conexión:
-MONGODB_URI = 'mongodb+srv://<usuario>:<password>@ecommify.xdwdeqf.mongodb.net/?appName=ecommify'
+# Notebook de rendimiento (Unidad 6): carga concurrente, escalabilidad, replication lag
+jupyter notebook notebooks/Load_Testing_Performance_U6.ipynb
 ```
 
-El notebook ejecuta:
-- Creación de índices ESR compuestos y parciales
-- `.explain('executionStats')` antes y después de cada índice
-- Pipeline de agregación de 7 stages con `allowDiskUse=True`
-- Estado real del replica set (3 nodos)
-- Medición de Write Concerns (w=1, majority, majority+j)
+Configurar `MONGODB_URI` y `PG_DSN` en la celda de conexión de cada notebook con las credenciales del proyecto.
 
 ---
 
-## Resultados de optimización (métricas reales)
+## Resultados principales (resumen)
+
+> Ver `resultados/RESULTADOS_CONSOLIDADOS_U5_U6.md` para el detalle completo de todas las métricas.
 
 ### PostgreSQL — EXPLAIN ANALYZE
 
-| Query | Descripción | Antes (ms) | Después (ms) | Mejora |
-|---|---|---|---|---|
-| Q2 | Catálogo con filtros y reviews | 404.14 | 389.29 | +3.7% |
-| Q4 | Búsqueda ILIKE productos | 21.45 | 19.63 | +8.5% |
-| Q6 | Top 10 productos más vendidos | 2910 | 2620 | +10.0% |
-| Q7 | Verificación producto por PK | 0.001 | 0.001 | Óptima |
-| Q8 | Pagos pendientes por método | 341.20 | 228.17 | **+33.1%** |
-
-> Q1, Q3 y Q5 presentan degradación por cast `o.id::TEXT = oi.order_id`.
-> Ver sección Deuda Técnica.
-
-### MongoDB — .explain('executionStats')
-
-| Consulta | Docs examinados | Docs retornados | Tiempo (ms) | Eficiencia |
-|---|---|---|---|---|
-| Catálogo laptops por rating (ESR) | 76 | 76 | 2 | 100% |
-| Productos activos con stock (parcial) | 679 | 676 | 1 | 99.6% |
-| Productos con rating alto | 328 | 328 | 0 | 100% |
-
----
-
-## Índices especializados implementados
-
-### PostgreSQL (10 índices)
-
-| Índice | Tipo | Tabla | Mejora principal |
+| Query | Antes (ms) | Después (ms) | Mejora |
 |---|---|---|---|
-| `idx_orders_customer_id` | B-tree | orders | Q1: historial cliente |
-| `idx_orders_status_created_at` | B-tree compuesto ESR | orders | Q5: reportes por fecha |
-| `idx_products_category_price_stock` | B-tree parcial | products | Q2: catálogo activo |
-| `idx_products_specifications_gin` | GIN JSONB | products | Consultas con @> |
-| `idx_products_name_trgm` | GIN trigrama | products | Q4: búsqueda ILIKE |
-| `idx_order_items_product_id` | B-tree | order_items | Q3/Q6: JOIN frecuente |
-| `idx_payments_order_id_status` | B-tree compuesto | payments | Q5: JOIN + filtro estado |
-| `idx_orders_created_at_brin` | BRIN | orders | ~128 KB vs 8 MB B-tree |
-| `idx_payments_pending_recent` | Parcial B-tree | payments | **Q8: +33.1%** |
-| `idx_reviews_product_rating` | B-tree compuesto | reviews | Q2: JOIN + sort |
+| Q8 — Pagos pendientes | 341.20 | 228.17 | **+33.1%** |
+| Q6 — Top productos | 2,910 | 2,620 | +10.0% |
+| Q4 — Búsqueda ILIKE | 21.45 | 19.63 | +8.5% |
+| Q2 — Catálogo con filtros | 404.14 | 389.29 | +3.7% |
 
-### MongoDB (5 índices)
+### MongoDB — explain('executionStats')
 
-| Índice | Colección | Tipo | Tamaño |
-|---|---|---|---|
-| `idx_esr_status_category_rating_price` | products | B-tree compuesto ESR | 40 KB |
-| `idx_esr_reviews_product_score_date` | reviews | B-tree compuesto ESR | Medido |
-| `idx_partial_active_instock` | products | Parcial B-tree | 36 KB |
-| `idx_text_search` | products | Text index (español) | 336 KB |
-| `{category:1, _id:'hashed'}` | products | Shard key teórica | N/A M0 |
+| Consulta | Eficiencia |
+|---|---|
+| Catálogo laptops (ESR) | 100% |
+| Productos con rating alto | 100% |
+| Productos activos con stock (parcial) | 99.6% |
+
+### Carga concurrente (Unidad 6, 50 usuarios simulados)
+
+| Motor | Throughput máx. | Errores |
+|---|---|---|
+| MongoDB (Atlas) | 95.5 qps | **0** |
+| PostgreSQL (Supabase) | 16.5 qps | 150 (límite de pool de conexiones del free tier) |
+
+### Replication Lag medido (MongoDB, 30 muestras)
+
+| Promedio | P95 | Umbral teórico asumido |
+|---|---|---|
+| 269.59 ms | 1,125.27 ms | 200 ms — **superado** |
 
 ---
 
 ## Deuda técnica documentada
 
-El cast `o.id::TEXT = oi.order_id` en los JOINs impide el uso eficiente de índices en Q1, Q3 y Q5.
-
-**Causa:** `orders.id` es `UUID` pero `order_items.order_id` es `VARCHAR(36)`.
-
-**Solución arquitectónica:**
-```sql
--- Migración requerida para eliminar el cast:
-ALTER TABLE order_items ALTER COLUMN order_id TYPE UUID
-  USING order_id::UUID;
-ALTER TABLE payments ALTER COLUMN order_id TYPE UUID
-  USING order_id::UUID;
--- Luego recrear los índices afectados
-```
+| Hallazgo | Causa | Solución propuesta |
+|---|---|---|
+| Cast `o.id::TEXT = oi.order_id` en JOINs | `orders.id` es UUID, `order_items.order_id` es VARCHAR | Migrar `order_items.order_id` y `payments.order_id` a tipo UUID |
+| Pool de conexiones agotado (10-25 usuarios) | Plan Nano de Supabase limita a 15 conexiones | PgBouncer dedicado o plan superior |
+| Replication lag superior a lo asumido | Tier M0 compartido sin SLA de replicación | Migrar a M10+ para producción |
 
 ---
 
-## Setup con Docker (desarrollo local)
+## Análisis arquitectónico: Teorema CAP por módulo
 
-```bash
-# 1. Clonar variables de entorno
-cp .env.example .env
+| Módulo | Motor | Prioridad CAP | Justificación |
+|---|---|---|---|
+| Órdenes y pagos | PostgreSQL | **CP** | Rechaza escritura ante falla en lugar de arriesgar inconsistencia financiera |
+| Catálogo (lectura) | MongoDB `secondaryPreferred` | **AP** | Tolera el lag medido a cambio de disponibilidad y distribución de carga |
+| Reseñas y eventos | MongoDB `w:1` / `w:0` | **AP** | Pérdida ocasional aceptable; no son datos financieros |
 
-# 2. Levantar el stack completo
-docker compose up -d
-```
-
-| Servicio | Puerto | Descripción |
-|---|---|---|
-| `ecommify-postgres` | `5432` | PostgreSQL 15 |
-| `ecommify-mongo` | `27017` | MongoDB 8 |
-| `ecommify-backend` | `3000` | API REST Node.js |
-| `ecommify-frontend` | `5173` | React + nginx |
-
-Abrir **http://localhost:5173** en el navegador.
-
----
-
-## Credenciales de prueba
-
-| Rol | Email | Contraseña |
-|---|---|---|
-| Vendedor | `techstore@ecommify.com` | `Test1234!` |
-| Vendedor | `gadget@ecommify.com` | `Test1234!` |
-| Cliente | `ana@example.com` | `Test1234!` |
-| Cliente | `carlos@example.com` | `Test1234!` |
+Detalle completo de escenarios de falla, trade-offs por escenario de negocio (Black Friday, auditoría financiera) y recomendaciones estratégicas en `docs/Informe_Tecnico_Integral_U6_Ecommify.docx`.
 
 ---
 
@@ -316,71 +251,49 @@ Abrir **http://localhost:5173** en el navegador.
 cd backend
 npm test                 # Todos los tests
 npm run test:coverage    # Con reporte HTML
-npm run test:ci          # Modo CI/CD
 ```
-
-```
------------------------|---------|----------|---------|---------|
-File                   | % Stmts | % Branch | % Funcs | % Lines |
------------------------|---------|----------|---------|---------|
-All files              |    98.3 |    89.28 |     100 |     100 |
- auth.service.js       |   93.33 |     87.5 |     100 |     100 |
- cart.service.js       |     100 |       75 |     100 |     100 |
- catalog.service.js    |     100 |     90.9 |     100 |     100 |
- checkout.service.js   |     100 |    88.88 |     100 |     100 |
- inventory.service.js  |     100 |      100 |     100 |     100 |
- reviews.service.js    |     100 |      100 |     100 |     100 |
------------------------|---------|----------|---------|---------|
-Test Suites: 6 passed, 6 total  |  Tests: 67 passed, 67 total
-```
-
-### Documentación de testing
-
-| Documento | Ubicación |
-|---|---|
-| Plan de pruebas | `backend/docs/TEST_PLAN.md` |
-| Matriz de trazabilidad (67 filas) | `backend/docs/TRACEABILITY_MATRIX.md` |
-| Reporte HTML de cobertura | `backend/coverage/index.html` |
-| Log de ejecución | `backend/tests/evidence/test-output.txt` |
 
 ---
 
-## API Endpoints
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| POST | `/api/auth/register` | Registro de usuario |
-| POST | `/api/auth/login` | Login y JWT |
-| GET | `/api/catalog` | Listado con filtros |
-| GET | `/api/catalog/:id` | Detalle de producto |
-| GET | `/api/cart/:userId` | Ver carrito |
-| POST | `/api/cart/:userId/items` | Agregar ítem |
-| DELETE | `/api/cart/:userId/items/:productId` | Eliminar ítem |
-| PATCH | `/api/cart/:userId/items/:productId` | Actualizar cantidad |
-| POST | `/api/checkout/orders` | Crear orden |
-| POST | `/api/reviews` | Publicar reseña |
-| GET | `/api/reviews/product/:productId` | Reseñas de un producto |
-| GET | `/api/inventory/seller/:sellerId` | Inventario del vendedor |
-| PATCH | `/api/inventory/:productId` | Actualizar stock |
-
----
-
-## Comandos Docker adicionales
+## Setup con Docker (desarrollo local)
 
 ```bash
-docker compose logs -f backend      # Logs en tiempo real
-docker compose up -d --build        # Reconstruir tras cambios
-docker compose down                 # Detener contenedores
-docker compose down -v              # Detener y borrar volúmenes
+cp .env.example .env
+docker compose up -d
 ```
+
+| Servicio | Puerto |
+|---|---|
+| `ecommify-postgres` | 5432 |
+| `ecommify-mongo` | 27017 |
+| `ecommify-backend` | 3000 |
+| `ecommify-frontend` | 5173 |
 
 ---
 
-## Documentación adicional
+## Credenciales de prueba
 
-| Documento | Descripción |
-|---|---|
-| `docs/Documento_Tecnico_U5_Ecommify_APA7.docx` | Documento técnico completo U5 — APA7 |
-| `notebooks/MongoDB_U5_Optimizacion_Ecommify.ipynb` | Optimización MongoDB con métricas reales |
-| `seed_data/03_optimizacion_analisis.sql` | EXPLAIN ANALYZE + 10 índices PostgreSQL |
-| `docs/Extensiones_PostgreSQL_Ecommify.md` | Análisis detallado de extensiones |
+| Rol | Email | Contraseña |
+|---|---|---|
+| Vendedor | `techstore@ecommify.com` | `Test1234!` |
+| Cliente | `ana@example.com` | `Test1234!` |
+
+---
+
+## Documentación completa por unidad
+
+| Unidad | Entregable | Ubicación |
+|---|---|---|
+| U5 | Documento técnico de implementación (APA7) | `docs/Documento_Tecnico_U5_Ecommify_APA7.docx` |
+| U5 | Notebook de optimización MongoDB | `notebooks/MongoDB_U5_Optimizacion_Ecommify.ipynb` |
+| U6 | Informe técnico integral (arquitectura + rendimiento + CAP) | `docs/Informe_Tecnico_Integral_U6_Ecommify.docx` |
+| U6 | Presentación ejecutiva | `docs/Presentacion_Ejecutiva_U6_Ecommify.pptx` |
+| U6 | Notebook de pruebas de carga y escalabilidad | `notebooks/Load_Testing_Performance_U6.ipynb` |
+| U6 | Resultados consolidados de todas las pruebas | `resultados/RESULTADOS_CONSOLIDADOS_U5_U6.md` |
+| U6 | Video de presentación final (12-15 min) | Enlace en la entrega de la plataforma del curso |
+
+---
+
+## Licencia y uso académico
+
+Proyecto desarrollado con fines académicos para la Maestría en Arquitectura de Software de la Universidad de La Sabana. Dataset base bajo licencia de Kaggle (Olist Brazilian E-Commerce).
