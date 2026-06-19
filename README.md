@@ -255,19 +255,43 @@ npm run test:coverage    # Con reporte HTML
 
 ---
 
-## Setup con Docker (desarrollo local)
+## Cómo ejecutar el proyecto
+
+### Requisitos previos
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y corriendo
+- Archivo `.env` en la raíz del repositorio (solicitarlo al equipo; **no se versiona**)
+
+### Levantar con Docker Compose
 
 ```bash
+# 1. Copiar la plantilla si aún no tienes el .env
 cp .env.example .env
-docker compose up -d
+#    → Editar .env con las credenciales reales de Supabase y Atlas
+
+# 2. Construir imágenes y levantar contenedores
+docker compose up -d --build
+
+# 3. Verificar que el backend esté saludable
+curl http://localhost:3000/health
+# → {"status":"ok","uptime":...}
 ```
 
-| Servicio | Puerto |
-|---|---|
-| `ecommify-postgres` | 5432 |
-| `ecommify-mongo` | 27017 |
-| `ecommify-backend` | 3000 |
-| `ecommify-frontend` | 5173 |
+| Servicio | URL | Descripción |
+|---|---|---|
+| Frontend | http://localhost:5173 | React + Nginx |
+| Backend API | http://localhost:3000/api | Node.js + Express |
+| Health check | http://localhost:3000/health | Estado del servidor |
+
+```bash
+# Ver logs en tiempo real
+docker compose logs -f
+
+# Detener y eliminar contenedores
+docker compose down
+```
+
+> **Bases de datos en la nube** — el proyecto usa Supabase (PostgreSQL) y MongoDB Atlas; no se levantan contenedores locales de base de datos. El `.env` debe contener las URIs correctas de conexión.
 
 ---
 
